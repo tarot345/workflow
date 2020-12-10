@@ -16,7 +16,7 @@ class FlowExecutor {
         AtomicInteger barrier;
         FlowNode nextNode;
         FlowNode doneNode;
-        Object failure;
+        Object errorObject;
     }
 
     private long seqId;
@@ -79,7 +79,7 @@ class FlowExecutor {
                 subNodeState.doneNode = node;
             }
             nodeState.barrier = new AtomicInteger(node.childrenList.size());
-        } else if (node.nodeType == FlowNode.NodeType.FLOW_TASK_NODE) {
+        } else if (node.nodeType == FlowNode.NodeType.RUNNABLE_NODE) {
             nodeState.barrier = new AtomicInteger(1);
         }
         return nodeState;
@@ -89,7 +89,11 @@ class FlowExecutor {
         try {
             switch (node.nodeType) {
                 case ACTION_NODE: {
-                    node.actionExecutor.run(context);
+                    try {
+                        node.actionExecutor.run(context);
+                    } catch (Throwable e) {
+                        e.printStackTrace();
+                    }
                     onNodeDone(node);
                     break;
                 }
@@ -103,9 +107,12 @@ class FlowExecutor {
                     }
                     break;
                 }
-                case FLOW_TASK_NODE: {
-                    if (node.flowTask != null) {
-                        node.flowTask.run(this);
+                case RUNNABLE_NODE: {
+                    try {
+                        if (node.flowRunnable != null)
+                            node.flowRunnable.run(this);
+                    } catch (Throwable e) {
+                        e.printStackTrace();
                     }
                     onNodeDone(node);
                     break;
@@ -116,14 +123,14 @@ class FlowExecutor {
             }
         } catch (Throwable e) {
             e.printStackTrace();
-            setNodeFailure(node, e);
+            setNodeError(node, e);
         }
     }
 
-    private void setNodeFailure(FlowNode node, Object o) {
+    private void setNodeError(FlowNode node, Object o) {
         NodeState nodeState = stateMap.get(node);
         if (nodeState != null) {
-            nodeState.failure = o;
+            nodeState.errorObject = o;
         }
     }
 }

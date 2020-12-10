@@ -8,7 +8,7 @@ class FlowNode {
         ACTION_NODE("ACTION"),
         SERIAL_NODE("SERIAL"),
         PARALLEL_NODE("PARALLEL"),
-        FLOW_TASK_NODE("_TASK_");
+        RUNNABLE_NODE("_RUNNABLE_");
 
         String name;
         NodeType(String name) { this.name = name; }
@@ -21,5 +21,5 @@ class FlowNode {
     NodeType nodeType;
     ActionExecutor actionExecutor;
     List<FlowNode> childrenList;
-    FlowTask flowTask;
+    FlowRunnable flowRunnable;
 }

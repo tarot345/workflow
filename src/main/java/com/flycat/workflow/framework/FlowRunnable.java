@@ -1,5 +1,5 @@
 package com.flycat.workflow.framework;
 
-public interface FlowTask {
+public interface FlowRunnable {
     void run(FlowExecutor executor);
 }
