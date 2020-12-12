@@ -5,10 +5,16 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 class FlowExecutor {
+    private static final Logger LOGGER = Logger.getLogger(FlowExecutor.class.getName());
+
     /*
      * Node state.
      */
@@ -19,20 +25,46 @@ class FlowExecutor {
         Object errorObject;
     }
 
+    private enum ExecutorStatus {
+        INIT, RUNNING, EXIT
+    }
+
     private long seqId;
     private ActionContext context;
-    private ThreadPoolExecutor threadPool;
+    private FlowFuture flowFuture;
+    private long startTimestamp = 0;
+    private long stopTimestamp = 0;
+    private AtomicReference<ExecutorStatus> status;
     private Map<FlowNode, NodeState> stateMap;
+    private ThreadPoolExecutor threadPool;
 
     public FlowExecutor(long seqId, ActionContext context,
                         ThreadPoolExecutor executor) {
         this.seqId = seqId;
         this.context = Objects.requireNonNull(context);
-        this.threadPool = Objects.requireNonNull(executor);
+        this.flowFuture = new FlowFuture();
+        this.status = new AtomicReference<>(ExecutorStatus.INIT);
         this.stateMap = new ConcurrentHashMap<>();
+        this.threadPool = Objects.requireNonNull(executor);
     }
 
     public long getSeqId() { return seqId; }
+
+    public void onExecutorStart() {
+        startTimestamp = System.currentTimeMillis();
+        status.compareAndSet(ExecutorStatus.INIT, ExecutorStatus.RUNNING);
+    }
+
+    public void onExecutorExit() {
+        if (status.compareAndSet(ExecutorStatus.RUNNING, ExecutorStatus.EXIT)) {
+            flowFuture.setIsDone();
+            stopTimestamp = System.currentTimeMillis();
+        }
+    }
+
+    public Future<Void> getFuture() {
+        return flowFuture;
+    }
 
     private void onNodeDone(FlowNode node) {
         NodeState nodeState = stateMap.get(node);
@@ -89,11 +121,7 @@ class FlowExecutor {
         try {
             switch (node.nodeType) {
                 case ACTION_NODE: {
-                    try {
-                        node.actionExecutor.run(context);
-                    } catch (Throwable e) {
-                        e.printStackTrace();
-                    }
+                    node.actionExecutor.run(context);
                     onNodeDone(node);
                     break;
                 }
@@ -108,12 +136,8 @@ class FlowExecutor {
                     break;
                 }
                 case RUNNABLE_NODE: {
-                    try {
-                        if (node.flowRunnable != null)
-                            node.flowRunnable.run(this);
-                    } catch (Throwable e) {
-                        e.printStackTrace();
-                    }
+                    if (node.flowRunnable != null)
+                        node.flowRunnable.run(this);
                     onNodeDone(node);
                     break;
                 }
@@ -122,8 +146,8 @@ class FlowExecutor {
                 }
             }
         } catch (Throwable e) {
-            e.printStackTrace();
             setNodeError(node, e);
+            LOGGER.log(Level.SEVERE, "FlowExecutor exception: ", e);
         }
     }
 

@@ -5,8 +5,12 @@ import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /************************************************************************
  *
@@ -54,16 +58,20 @@ import java.util.concurrent.atomic.AtomicLong;
  ***********************************************************************/
 
 public class WorkFlow {
+    private static final Logger LOGGER = Logger.getLogger(WorkFlow.class.getName());
+
     private String name;
     private String layout;
     private FlowNode rootNode;
     private AtomicLong counter;
     private ThreadPoolExecutor threadPool;
+    private Map<Long, FlowExecutor> runningExecutors;
 
     public WorkFlow(String layoutConfig, ThreadPoolExecutor threadPool) {
         this.layout = Objects.requireNonNull(layoutConfig);
         this.counter = new AtomicLong(0);
         this.threadPool = Objects.requireNonNull(threadPool);
+        this.runningExecutors = new ConcurrentHashMap<>();
     }
 
     public boolean init() {
@@ -88,18 +96,20 @@ public class WorkFlow {
             exitNode.flowRunnable = (FlowExecutor e) -> { onFlowExecutorExit(e);};
             rootNode.childrenList.add(exitNode);
         } catch (Throwable e) {
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, "Failed to init workflow with layout " + layout, e);
             return false;
         }
         return true;
     }
 
     private void onFlowExecutorStart(FlowExecutor executor) {
-        System.out.println("Executor " + executor.getSeqId() + " start");
+        runningExecutors.put(executor.getSeqId(), executor);
+        executor.onExecutorStart();
     }
 
     private void onFlowExecutorExit(FlowExecutor executor) {
-        System.out.println("Executor " + executor.getSeqId() + " exit");
+        executor.onExecutorExit();
+        runningExecutors.remove(executor.getSeqId());
     }
 
     private FlowNode parseLayoutNode(JSONObject object, String nodeSeq) throws Exception {
@@ -142,10 +152,11 @@ public class WorkFlow {
         return node;
     }
 
-    public void run(ActionContext context) {
+    public Future<Void> run(ActionContext context) {
         FlowExecutor flowExecutor = new FlowExecutor(
                 counter.incrementAndGet(), context, threadPool);
         flowExecutor.addNode(rootNode);
         flowExecutor.runNode(rootNode);
+        return flowExecutor.getFuture();
     }
 }
