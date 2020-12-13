@@ -27,7 +27,7 @@ public class WorkFlowTest {
     }
     public static class TestAction extends Action {
         private TestContext testContext;
-        public TestAction(ActionContext context) {
+        public TestAction(ActionContext  context) {
             super(context);
             testContext = (TestContext)context;
         }
