@@ -130,8 +130,8 @@ class FlowExecutor {
                     break;
                 }
                 case PARALLEL_NODE: {
-                    for (FlowNode childNode : node.childrenList) {
-                        threadPool.submit(() -> runNode(childNode));
+                    for (FlowNode child : node.childrenList) {
+                        threadPool.submit(() -> runNode(child));
                     }
                     break;
                 }

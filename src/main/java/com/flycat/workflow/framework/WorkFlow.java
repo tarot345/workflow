@@ -159,7 +159,7 @@ public class WorkFlow {
         FlowExecutor flowExecutor = new FlowExecutor(
                 counter.incrementAndGet(), context, threadPool);
         flowExecutor.addNode(rootNode);
-        flowExecutor.runNode(rootNode);
+        threadPool.submit(() -> flowExecutor.runNode(rootNode));
         return flowExecutor.getFuture();
     }
 }
